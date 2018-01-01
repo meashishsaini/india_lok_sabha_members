@@ -12,7 +12,7 @@ TERM = 4
 # pylint: disable=C0301
 class LokSabhaMembersSpider(scrapy.Spider):
     name = "lkmembers"
-    honorific_prefixes = r"Shri|Dr\.|Prof\.|Smt\.|Kumari|Pandit|Sardar|Qazi|Mohammad"
+    honorific_prefixes = r"Shri|Dr\.|Prof\.|Smt\.|Kumari|Pandit|Sardar|Qazi|Mohammad|Maulana"
     honorific_suffixes = "Maulana"
     intext = None
     alp_at = 0
@@ -72,12 +72,12 @@ class LokSabhaMembersSpider(scrapy.Spider):
                     'last_name' : last_name,
                     'middle_name' : middle_name,
                     'name' : name,
-                    'honorific_prefix' : honorific_prefix,
-                    'honorific_suffix' : honorific_suffix,
+                    'honorific_prefix' : ";".join(honorific_prefix),
+                    'honorific_suffix' : ";".join(honorific_suffix),
                     'party': party_td.xpath('normalize-space()').extract_first(),
                     'area': area,
                     'state' : state,
-                    'term': term_td.xpath('normalize-space()').extract_first().split(','),
+                    'term': term_td.xpath('normalize-space()').extract_first(),
                     'link': url,
                     'identifier_mpsno': name_with_link_td.xpath('a/@href').re(r'(?<=mpsno=)\d+')[0]
                     }
@@ -100,7 +100,7 @@ class LokSabhaMembersSpider(scrapy.Spider):
         else:
              data_in = self.parse_new_members(response)
         scraperwiki.sqlite.save(
-        unique_keys=['identifier_mpsno'], data =  data_in
+        unique_keys=['identifier_mpsno'], data =  dict(data_in)
         )
 
     def parse_old_members(self, response):
@@ -127,7 +127,7 @@ class LokSabhaMembersSpider(scrapy.Spider):
 
         email_idsa = self.new_match_string(res=response, string="Email Address :", ext="td/text()").extract()
         if email_idsa is not None:
-            data['email_ids'] = (self.strip_and_join(lista=email_idsa, joinby=";")).replace("[AT]", "@").replace("[DOT]", ".")
+            data['email_ids'] = ';'.join((self.strip_and_join(lista=email_idsa, joinby=";")).split(' ')).replace("[AT]", "@").replace("[DOT]", ".").replace(',','')
 
         website = self.new_match_string(res=response, string="Website :", ext="td/a/@href").extract_first()
         if website is not None:
@@ -379,13 +379,14 @@ class LokSabhaMembersSpider(scrapy.Spider):
 
     def get_name(self, namestring):
         namelist = namestring.split(',')
-        firstname = lastname = middlename = honorificprefix = honorificsuffix = ''
+        firstname = lastname = middlename = honorificprefix = honorificsuffix = ""
         if len(namelist) > 1:
-            honorificprefix, firstname = self.remove_get_honorific_prefix(string=namelist[1])
-        if firstname == '':
+            honorificprefix, firstname = self.remove_get_honorific_prefix(instring=namelist[1])
+        firstname = firstname.strip()
+        if len(firstname) <= 0:
             firstname = namelist[0]
         else:
-            honorificsuffix, lastname = self.remove_get_honorific_suffix(string=namelist[0])
+            honorificsuffix, lastname = self.remove_get_honorific_suffix(instring=namelist[0])
         namelist = firstname.split(' ')
         if len(namelist) > 1:
             firstname = namelist[0]
@@ -393,6 +394,14 @@ class LokSabhaMembersSpider(scrapy.Spider):
                 middlename = namelist[1]
             else:
                 lastname = namelist[1]
+        lastname = lastname.strip()
+        namelist = lastname.split(' ')
+        if len(namelist) > 1:
+            lastname = namelist[1]
+            if firstname:
+                middlename = namelist[0]
+            else:
+                firstname = namelist[0]
         name = firstname.strip()
         if middlename:
             name = name + ' ' + middlename.strip()
@@ -400,24 +409,24 @@ class LokSabhaMembersSpider(scrapy.Spider):
             name = name + ' ' + lastname.strip()
         return honorificprefix, honorificsuffix, firstname.strip(), middlename.strip(), lastname.strip(), name.strip()
 
-    def remove_get_honorific_prefix(self, string):
-        honorific_prefix = re.findall('('+self.honorific_prefixes+')+', string, re.I)
+    def remove_get_honorific_prefix(self, instring):
+        honorific_prefix = re.findall('('+self.honorific_prefixes+')+', instring, re.I)
         name = ""
         if not honorific_prefix:
-            name = string
+            name = instring
         else:
-            tmp = re.search('\\b(?:(?!'+self.honorific_prefixes+')\\w).+', string, re.I)
+            tmp = re.search('\\b(?:(?!'+self.honorific_prefixes+')\\w).+', instring, re.I)
             if tmp != None:
                 name = tmp.group()
         return honorific_prefix, name
 
-    def remove_get_honorific_suffix(self, string):
-        honorific_suffix = re.findall('('+self.honorific_suffixes+')+', string, re.I)
+    def remove_get_honorific_suffix(self, instring):
+        honorific_suffix = re.findall('('+self.honorific_suffixes+')+', instring, re.I)
         name = ""
         if not honorific_suffix:
-            name = string
+            name = instring
         else:
-            tmp = re.search('\\b(?:(?!'+self.honorific_suffixes+')\\w).+', string, re.I)
+            tmp = re.search('\\b(?:(?!'+self.honorific_suffixes+')\\w).+', instring, re.I)
             if tmp != None:
                 name = tmp.group()
         return honorific_suffix, name
