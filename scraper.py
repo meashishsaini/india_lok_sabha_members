@@ -3,6 +3,7 @@ import re
 import string
 import scrapy
 from scrapy.crawler import CrawlerProcess
+import scraperwiki
 SERIAL = 0
 NAME_WITH_LINK = 1
 PARTY = 2
